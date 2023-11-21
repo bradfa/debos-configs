@@ -1,0 +1,150 @@
+# debos config file supporting the Raspberry Pi 4 with UEFI bootloader.
+# In order to use UEFI on your Raspberry Pi 4, you may need to update the EEPROM
+# using an SD card image from here: https://github.com/raspberrypi/rpi-eeprom
+
+# Although debos is only packaged for amd64 within Debian, debos will use QEMU
+# in order to run some steps of the image build process when it needs to execute
+# code within the disk image itself.
+architecture: arm64
+
+actions:
+  - action: debootstrap
+    description: Debootstrap core distro
+    suite: "bookworm"
+    components:
+      - main
+    mirror: http://mirror.rit.edu/debian
+
+  - action: apt
+    description: Install expected base packages
+    packages:
+      - ca-certificates
+      - linux-image-arm64
+      - locales
+      - lsb-release
+      - openssh-server
+      - avahi-daemon
+      - ntp
+      - netplan.io
+      - systemd-resolved
+      - man-db
+
+  - action: run
+    description: Delete any generated SSH server keys
+    chroot: true
+    command: rm -vf /etc/ssh/ssh_host*key*
+
+  - action: overlay
+    description: Apply system overlay files
+    source: overlays/raspberrypi4-uefi-bookworm
+
+  - action: run
+    description: Enable first-boot.service
+    chroot: true
+    command: systemctl enable first-boot.service
+
+  - action: run
+    description: Generate en_US.UTF-8 locale
+    chroot: true
+    command: locale-gen
+
+  - action: run
+    description: Set the default hostname
+    chroot: true
+    command: echo raspi > /etc/hostname
+
+  - action: run
+    description: Set the default root password
+    chroot: true
+    command: echo "root:password" | chpasswd
+
+  - action: run
+    description: Create /boot/efi directory
+    chroot: true
+    command: mkdir -v /boot/efi
+
+  - action: image-partition
+    description: Create a partitioned disk image
+    imagename: raspberrypi4-uefi-bookworm.img
+    imagesize: 32GB # TODO: enable setting via variable
+    partitiontype: gpt
+    partitions:
+      - name: esp
+        parlabel: ESP
+        flags: [ boot, esp ]
+        parttype: c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+        fs: vfat
+        start: 0%
+        end: 4GB # This is rather large as we'll use systemd-boot
+        fsck: true
+      - name: swap
+        parttype: 0657fd6d-a4ab-43c4-84e5-0933c84b4f4f # GPT swap GUID
+        fs: none
+        start: 4GB
+        end: 8GB
+      - name: root
+        parttype: b921b045-1df0-41c3-af44-4c6f280d3fae # arm64 rootfs GUID
+        fs: btrfs
+        start: 8GB
+        end: 100%
+        fsck: true
+    mountpoints:
+      - mountpoint: /boot/efi/
+        partition: esp
+      - mountpoint: /
+        partition: root
+
+# ttyS1 is GPIO14 and GPIO15, pins 8 and 10 on the J8 header
+  - action: filesystem-deploy
+    description: Deploy the created filesystem onto the disk image
+    setup-fstab: true
+    setup-kernel-cmdline: true
+    append-kernel-cmdline: console=ttyS1,115200n8
+
+  - action: run
+    description: Enable swap partition
+    chroot: true
+    script: scripts/swapon.sh
+
+  - action: run
+    description: Add contrib, non-free, and non-free-firmware apt sources
+    chroot: true
+    command: sed -i /etc/apt/sources.list -e "s/main$/main contrib non-free non-free-firmware/g" 
+
+  - action: run
+    description: Update apt sources
+    chroot: true
+    command: apt-get update
+
+  - action: apt
+    description: Install Raspberry Pi non-free firmware
+    packages:
+      - raspi-firmware
+      - firmware-brcm80211
+      - firmware-misc-nonfree
+      - bluez-firmware
+
+  - action: apt
+    description: Install systemd-boot bootloader
+    packages:
+      - systemd-boot
+
+  - action: run
+    description: Fixup systemd-boot default timeout
+    chroot: false
+    command: sed -i -e "s/#timeout/timeout/g" $ROOTDIR/boot/efi/loader/loader.conf
+
+  - action: run
+    description: Install Raspberry Pi 4 UEFI to ESP
+    chroot: false
+    command: cd $ROOTDIR/boot/efi; wget -O raspi-uefi.zip https://github.com/pftf/RPi4/releases/download/v1.35/RPi4_UEFI_Firmware_v1.35.zip; unzip raspi-uefi.zip; rm -v raspi-uefi.zip
+      
+  - action: run
+    description: Clean up the apt downloaded files
+    chroot: true
+    command: apt-get clean
+
+  - action: run
+    description: Create bmaptool map file for the deployed disk image
+    postprocess: true
+    command: bmaptool create raspberrypi4-uefi-bookworm.img > raspberrypi4-uefi-bookworm.bmap
