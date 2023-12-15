@@ -13,6 +13,9 @@ actions:
     suite: "bookworm"
     components:
       - main
+      - contrib
+      - non-free
+      - non-free-firmware
     mirror: {{ $mirror }}
 
   - action: apt
@@ -105,11 +108,6 @@ actions:
     description: Enable swap partition
     chroot: true
     script: scripts/swapon.sh
-
-  - action: run
-    description: Add contrib, non-free, and non-free-firmware apt sources
-    chroot: true
-    command: sed -i /etc/apt/sources.list -e "s/main$/main contrib non-free non-free-firmware/g" 
 
   - action: run
     description: Update apt sources
