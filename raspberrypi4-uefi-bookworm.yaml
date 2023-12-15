@@ -4,8 +4,8 @@
 
 # Customizable variables for disk size and upstream Debian mirror.
 # Defaults to 128GB disk and RIT's mirror.
-{{- $disksize := or .disksize 128320801792 -}}
-{{- $mirror := or .mirror "http://mirror.rit.edu/debian/" -}}
+{{- $disksize := or .disksize 128320801792 }}
+{{- $mirror := or .mirror "http://mirror.rit.edu/debian/" }}
 
 # Although debos is only packaged for amd64 within Debian, debos will use QEMU
 # in order to run some steps of the image build process when it needs to execute
