@@ -1,0 +1,143 @@
+# debos config file supporting generic x86_64 machines with UEFI.
+
+# Customizable variables for disk size and upstream Debian mirror.
+# Defaults to 32GB disk and RIT's mirror.
+{{- $disksize := or .disksize 32015679488 }}
+{{- $mirror := or .mirror "http://mirror.rit.edu/debian/" }}
+
+architecture: amd64
+
+actions:
+  - action: debootstrap
+    description: Debootstrap core distro
+    suite: "bookworm"
+    components:
+      - main
+    mirror: {{ $mirror }}
+
+  - action: apt
+    description: Install expected base packages
+    packages:
+      - ca-certificates
+      - linux-image-amd64
+      - locales
+      - lsb-release
+      - openssh-server
+      - avahi-daemon
+      - ntp
+      - netplan.io
+      - systemd-resolved
+      - man-db
+
+  - action: run
+    description: Delete any generated SSH server keys
+    chroot: true
+    command: rm -vf /etc/ssh/ssh_host*key*
+
+  - action: overlay
+    description: Apply system overlay files
+    source: overlays/x86_64-uefi-bookworm
+
+  - action: run
+    description: Enable first-boot.service
+    chroot: true
+    command: systemctl enable first-boot.service
+
+  - action: run
+    description: Generate en_US.UTF-8 locale
+    chroot: true
+    command: locale-gen
+
+  - action: run
+    description: Set the default hostname
+    chroot: true
+    command: echo localhost > /etc/hostname
+
+  - action: run
+    description: Set the default root password
+    chroot: true
+    command: echo "root:password" | chpasswd
+
+  - action: run
+    description: Create /boot/efi directory
+    chroot: true
+    command: mkdir -v /boot/efi
+
+  - action: image-partition
+    description: Create a partitioned disk image
+    imagename: x86_64-uefi-bookworm.img
+    imagesize: {{ $disksize }}
+    partitiontype: gpt
+    partitions:
+      - name: esp
+        parlabel: ESP
+        flags: [ boot, esp ]
+        parttype: c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+        fs: vfat
+        start: 0%
+        end: 4GB # This is rather large as we'll use systemd-boot
+        fsck: true
+      - name: swap
+        parttype: 0657fd6d-a4ab-43c4-84e5-0933c84b4f4f # GPT swap GUID
+        fs: none
+        start: 4GB
+        end: 8GB
+      - name: root
+        parttype: 4f68bce3-e8cd-4db1-96e7-fbcaf984b709
+        fs: btrfs
+        start: 8GB
+        end: 100%
+        fsck: true
+    mountpoints:
+      - mountpoint: /boot/efi/
+        partition: esp
+      - mountpoint: /
+        partition: root
+
+# Disable predictable network naming for systemd/udev on kernel commandline
+  - action: filesystem-deploy
+    description: Deploy the created filesystem onto the disk image
+    setup-fstab: true
+    setup-kernel-cmdline: true
+    append-kernel-cmdline: net.ifnames=0
+
+  - action: run
+    description: Enable swap partition
+    chroot: true
+    script: scripts/swapon.sh
+
+  - action: run
+    description: Add contrib, non-free, and non-free-firmware apt sources
+    chroot: true
+    command: sed -i /etc/apt/sources.list -e "s/main$/main contrib non-free non-free-firmware/g" 
+
+  - action: run
+    description: Update apt sources
+    chroot: true
+    command: apt-get update
+
+  - action: apt
+    description: Install non-free firmware
+    packages:
+      - firmware-misc-nonfree
+      - bluez-firmware
+
+  - action: apt
+    description: Install systemd-boot bootloader
+    packages:
+      - systemd-boot
+
+  - action: run
+    description: Fixup systemd-boot default timeout
+    chroot: false
+    command: sed -i -e "s/#timeout/timeout/g" $ROOTDIR/boot/efi/loader/loader.conf
+
+  - action: run
+    description: Clean up the apt downloaded files
+    chroot: true
+    command: apt-get clean
+
+  - action: run
+    description: Create bmaptool map file for the deployed disk image
+    postprocess: true
+    command: bmaptool create x86_64-uefi-bookworm.img > x86_64-uefi-bookworm.bmap
