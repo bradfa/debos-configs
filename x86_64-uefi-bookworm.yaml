@@ -37,6 +37,7 @@ actions:
       - lsb-release
       - openssh-server
       - avahi-daemon
+      - libnss-mdns
       - ntp
       - netplan.io
       - systemd-resolved
