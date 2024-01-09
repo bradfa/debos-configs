@@ -1,0 +1,4 @@
+# Block installation of raspi-firmware as it's only for non-UEFI boards.
+Package: raspi-firmware
+Pin: release o=Debian
+Pin-Priority: -1

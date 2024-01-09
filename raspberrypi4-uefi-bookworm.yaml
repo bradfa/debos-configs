@@ -122,7 +122,6 @@ actions:
   - action: apt
     description: Install Raspberry Pi non-free firmware
     packages:
-      - raspi-firmware
       - firmware-brcm80211
       - firmware-misc-nonfree
       - bluez-firmware
