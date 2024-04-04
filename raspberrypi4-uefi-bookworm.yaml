@@ -33,6 +33,11 @@ actions:
     chroot: true
     command: echo deb {{ $mirror }} bookworm-updates main contrib non-free non-free-firmware >> /etc/apt/sources.list
 
+  - action: run
+    description: Update packages due to security and updates repo adds
+    chroot: true
+    command: apt-get update && apt-get -y dist-upgrade
+
   - action: apt
     description: Install expected base packages
     packages:

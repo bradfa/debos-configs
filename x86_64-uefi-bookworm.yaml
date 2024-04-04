@@ -28,6 +28,11 @@ actions:
     chroot: true
     command: echo deb {{ $mirror }} bookworm-updates main contrib non-free non-free-firmware >> /etc/apt/sources.list
 
+  - action: run
+    description: Update packages due to security and updates repo adds
+    chroot: true
+    command: apt-get update && apt-get -y dist-upgrade
+
   - action: apt
     description: Install expected base packages
     packages:
@@ -119,11 +124,6 @@ actions:
     description: Enable swap partition
     chroot: true
     script: scripts/swapon.sh
-
-  - action: run
-    description: Update apt sources
-    chroot: true
-    command: apt-get update
 
   - action: apt
     description: Install non-free firmware
