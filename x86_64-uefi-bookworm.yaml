@@ -36,7 +36,9 @@ actions:
   - action: apt
     description: Install expected base packages
     packages:
+      - amd64-microcode
       - ca-certificates
+      - intel-microcode
       - linux-image-amd64
       - locales
       - lsb-release
