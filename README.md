@@ -12,3 +12,7 @@ If you're building Debian Bullseye targets, you'll need to have QEMU version
 &gt;=5.0 on your build system due to changes to Bullseye's glibc package which
 enabled static PIE.  The symptom when you have a too old QEMU is a segfault
 during the second stage of debootstrapping.
+
+If you're building Ubuntu targets, you'll need to run `debos` with its `-m`
+switch to specify more memory, as the default 2048MB is too small to build the
+generic Linux kernel initrd, like: `debos -m 4096MB x86_64-uefi-focal.yaml`
