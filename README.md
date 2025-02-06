@@ -16,3 +16,8 @@ during the second stage of debootstrapping.
 If you're building Ubuntu targets, you'll need to run `debos` with its `-m`
 switch to specify more memory, as the default 2048MB is too small to build the
 generic Linux kernel initrd, like: `debos -m 4096MB x86_64-uefi-focal.yaml`
+
+Please see each configuration for information on which bootloader (grub versus
+systemd-boot) and network configuration mechanism (ifupdown versus netplan) are
+used.  They are not consistent across configurations due to various nuances of
+each distribution.
