@@ -1,0 +1,168 @@
+# debos config file supporting generic x86_64 machines with UEFI.
+
+# Be sure to run debos with the -m switch to specify allowing use of more memory
+# as the Ubuntu initrd creation needs more than the default 2048MB amount.
+
+# If the debos host machine is running Debian, you'll need to install the
+# ubuntu-keyring package in order to verify the debootstrap phase.
+
+# Customizable variables for disk size and upstream Debian mirror.
+# Defaults to 32GB disk and Canonical's official USA mirror.
+{{- $disksize := or .disksize 32015679488 }}
+{{- $mirror := or .mirror "http://us.archive.ubuntu.com/ubuntu/" }}
+
+architecture: amd64
+
+actions:
+  - action: debootstrap
+    description: Debootstrap core distro
+    suite: "focal"
+    keyring-file: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+    components:
+      - main
+    mirror: {{ $mirror }}
+
+  - action: run
+    description: Add security apt repo
+    chroot: true
+    command: echo deb {{ $mirror }} focal-security main >> /etc/apt/sources.list
+
+  - action: run
+    description: Add updates apt repo
+    chroot: true
+    command: echo deb {{ $mirror }} focal-updates main >> /etc/apt/sources.list
+
+  - action: run
+    description: Update packages due to security and updates repo adds
+    chroot: true
+    command: apt-get update && apt-get -y dist-upgrade
+
+  - action: apt
+    description: Install expected base packages
+    packages:
+      - ca-certificates
+      - initramfs-tools
+      - linux-image-generic
+      - locales
+      - lsb-release
+      - netplan.io
+      - openssh-server
+      - avahi-daemon
+      - libnss-mdns
+      - man-db
+
+  - action: run
+    description: Delete any generated SSH server keys
+    chroot: true
+    command: rm -vf /etc/ssh/ssh_host*key*
+
+  - action: overlay
+    description: Apply system overlay files
+    source: overlays/x86_64-uefi-focal
+
+  - action: run
+    description: Enable first-boot.service
+    chroot: true
+    command: systemctl enable first-boot.service
+
+  - action: run
+    description: Generate en_US.UTF-8 locale
+    chroot: true
+    command: locale-gen
+
+  - action: run
+    description: Set the default hostname
+    chroot: true
+    command: echo localhost > /etc/hostname
+
+  - action: run
+    description: Create systemd-resolved symlink
+    chroot: true
+    command: ln -svf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+
+  - action: run
+    description: Set the default root password
+    chroot: true
+    command: echo "root:password" | chpasswd
+
+  - action: run
+    description: Create /boot/efi directory
+    chroot: true
+    command: mkdir -v /boot/efi
+
+  - action: image-partition
+    description: Create a partitioned disk image
+    imagename: x86_64-uefi-focal.img
+    imagesize: {{ $disksize }}
+    partitiontype: gpt
+    partitions:
+      - name: esp
+        parlabel: ESP
+        flags: [ boot, esp ]
+        parttype: c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+        fs: vfat
+        start: 0%
+        end: 1GB
+        fsck: true
+      - name: swap
+        parttype: 0657fd6d-a4ab-43c4-84e5-0933c84b4f4f # GPT swap GUID
+        fs: none
+        start: 1GB
+        end: 5GB
+      - name: root
+        parttype: 4f68bce3-e8cd-4db1-96e7-fbcaf984b709
+        fs: btrfs
+        start: 5GB
+        end: 100%
+        fsck: true
+    mountpoints:
+      - mountpoint: /boot/efi/
+        partition: esp
+      - mountpoint: /
+        partition: root
+
+  - action: filesystem-deploy
+    description: Deploy the created filesystem onto the disk image
+    setup-fstab: true
+    setup-kernel-cmdline: true
+    append-kernel-cmdline: net.ifnames=0
+
+  - action: run
+    description: Enable swap partition
+    chroot: true
+    script: scripts/swapon.sh
+
+  - action: apt
+    description: Install grub bootloader package
+    packages:
+      - grub-efi
+
+  - action: run
+    description: Install grub bootloader to ESP at removable location only
+    chroot: true
+    command: grub-install --target=x86_64-efi --removable
+
+  - action: run
+    description: Modify kernel command line for old net naming
+    chroot: true
+    command: sed -i -e "s/\(GRUB_CMDLINE_LINUX\)=.*/\1=\"net.ifnames=0\"/g" /etc/default/grub
+
+  - action: run
+    description: Modify kernel command line to remove "splash" and "quiet"
+    chroot: true
+    command: sed -i -e "s/splash//g" -e "s/quiet//g" /etc/default/grub
+
+  - action: run
+    description: Update grub bootloader configuration file
+    chroot: true
+    command: update-grub
+
+  - action: run
+    description: Clean up the apt downloaded files
+    chroot: true
+    command: apt-get clean
+
+  - action: run
+    description: Create bmaptool map file for the deployed disk image
+    postprocess: true
+    command: bmaptool create x86_64-uefi-focal.img > x86_64-uefi-focal.bmap
