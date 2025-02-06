@@ -1,0 +1,154 @@
+# debos config file supporting generic x86_64 machines with UEFI.
+
+# Customizable variables for disk size and upstream Debian mirror.
+# Defaults to 32GB disk and RIT's mirror.
+{{- $disksize := or .disksize 32015679488 }}
+{{- $mirror := or .mirror "http://mirror.rit.edu/debian/" }}
+
+architecture: amd64
+
+actions:
+  - action: debootstrap
+    description: Debootstrap core distro
+    suite: "buster"
+    components:
+      - main
+      - contrib
+      - non-free
+    mirror: {{ $mirror }}
+
+  - action: run
+    description: Add security apt repo
+    chroot: true
+    command: echo deb http://security.debian.org/ buster/updates main contrib non-free >> /etc/apt/sources.list
+
+  - action: run
+    description: Add updates apt repo
+    chroot: true
+    command: echo deb {{ $mirror }} buster-updates main contrib non-free >> /etc/apt/sources.list
+
+  - action: run
+    description: Update packages due to security and updates repo adds
+    chroot: true
+    command: apt-get update && apt-get -y dist-upgrade
+
+  - action: apt
+    description: Install expected base packages
+    packages:
+      - amd64-microcode
+      - ca-certificates
+      - intel-microcode
+      - linux-image-amd64
+      - locales
+      - lsb-release
+      - openssh-server
+      - avahi-daemon
+      - libnss-mdns
+      - ntp
+      - man-db
+
+  - action: run
+    description: Delete any generated SSH server keys
+    chroot: true
+    command: rm -vf /etc/ssh/ssh_host*key*
+
+  - action: overlay
+    description: Apply system overlay files
+    source: overlays/x86_64-uefi-buster
+
+  - action: run
+    description: Enable first-boot.service
+    chroot: true
+    command: systemctl enable first-boot.service
+
+  - action: run
+    description: Generate en_US.UTF-8 locale
+    chroot: true
+    command: locale-gen
+
+  - action: run
+    description: Set the default hostname
+    chroot: true
+    command: echo localhost > /etc/hostname
+
+  - action: run
+    description: Set the default root password
+    chroot: true
+    command: echo "root:password" | chpasswd
+
+  - action: run
+    description: Create /boot/efi directory
+    chroot: true
+    command: mkdir -v /boot/efi
+
+  - action: image-partition
+    description: Create a partitioned disk image
+    imagename: x86_64-uefi-buster.img
+    imagesize: {{ $disksize }}
+    partitiontype: gpt
+    partitions:
+      - name: esp
+        parlabel: ESP
+        flags: [ boot, esp ]
+        parttype: c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+        fs: vfat
+        start: 0%
+        end: 1GB
+        fsck: true
+      - name: swap
+        parttype: 0657fd6d-a4ab-43c4-84e5-0933c84b4f4f # GPT swap GUID
+        fs: none
+        start: 1GB
+        end: 5GB
+      - name: root
+        parttype: 4f68bce3-e8cd-4db1-96e7-fbcaf984b709
+        fs: btrfs
+        start: 5GB
+        end: 100%
+        fsck: true
+    mountpoints:
+      - mountpoint: /boot/efi/
+        partition: esp
+      - mountpoint: /
+        partition: root
+
+  - action: filesystem-deploy
+    description: Deploy the created filesystem onto the disk image
+    setup-fstab: true
+    setup-kernel-cmdline: true
+    append-kernel-cmdline: net.ifnames=0
+
+  - action: run
+    description: Enable swap partition
+    chroot: true
+    script: scripts/swapon.sh
+
+  - action: apt
+    description: Install grub bootloader package
+    packages:
+      - grub-efi
+
+  - action: run
+    description: Install grub bootloader to ESP
+    chroot: true
+    command: grub-install --target=x86_64-efi --force-extra-removable
+
+  - action: run
+    description: Modify kernel command lines for old net naming
+    chroot: true
+    command: sed -i -e "s/\(GRUB_CMDLINE_LINUX\)=.*/\1=\"net.ifnames=0\"/g" /etc/default/grub
+
+  - action: run
+    description: Update grub bootloader configuration file
+    chroot: true
+    command: update-grub
+
+  - action: run
+    description: Clean up the apt downloaded files
+    chroot: true
+    command: apt-get clean
+
+  - action: run
+    description: Create bmaptool map file for the deployed disk image
+    postprocess: true
+    command: bmaptool create x86_64-uefi-buster.img > x86_64-uefi-buster.bmap
