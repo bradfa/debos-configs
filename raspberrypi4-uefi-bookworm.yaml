@@ -52,6 +52,7 @@ actions:
       - netplan.io
       - systemd-resolved
       - man-db
+      - sudo
 
   - action: run
     description: Delete any generated SSH server keys
