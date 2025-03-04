@@ -1,0 +1,83 @@
+# debos config file supporting Debian trixie containers for systemd-nspawn.
+
+# By default this machine expects you'll use macvlan networking.
+
+# Variables for arch, hostname, and upstream Debian mirror.
+{{- $arch := or .arch "amd64" }}
+{{- $hostname := or .hostname "localhost" }}
+{{- $mirror := or .mirror "http://deb.debian.org/debian/" }}
+
+architecture: {{ $arch }}
+
+actions:
+  - action: debootstrap
+    description: Debootstrap core distro
+    suite: "trixie"
+    variant: "minbase"
+    components:
+      - main
+    mirror: {{ $mirror }}
+
+  - action: apt
+    description: Install expected base packages
+    recommends: false
+    packages:
+      - avahi-daemon
+      - ca-certificates
+      - dbus
+      - iproute2
+      - less
+      - libnss-mdns
+      - libnss-systemd
+      - libpam-systemd
+      - locales
+      - lsb-release
+      - openssh-server
+      - sudo
+      - systemd
+      - systemd-resolved
+      - vim-tiny
+
+  - action: run
+    description: Delete any generated SSH server keys
+    chroot: true
+    command: rm -vf /etc/ssh/ssh_host*key*
+
+  - action: overlay
+    description: Apply system overlay files
+    source: overlays/nspawn-trixie
+
+  - action: run
+    description: Enable first-boot.service
+    chroot: true
+    command: systemctl enable first-boot.service
+
+  - action: run
+    description: Enable systemd-networkd
+    chroot: true
+    command: systemctl enable systemd-networkd.service
+
+  - action: run
+    description: Generate en_US.UTF-8 locale
+    chroot: true
+    command: locale-gen
+
+  - action: run
+    description: Set the default hostname
+    chroot: true
+    command: echo {{ $hostname }} > /etc/hostname
+
+  - action: run
+    description: Set the default root password
+    chroot: true
+    command: echo "root:password" | chpasswd
+
+  - action: run
+    description: Clean up the apt downloaded files
+    chroot: true
+    command: apt-get clean
+
+  - action: pack
+    description: Create tarball of filesystem
+    file: {{ $arch }}-nspawn-trixie-{{ $hostname }}.tar.gz
+    compression: gz

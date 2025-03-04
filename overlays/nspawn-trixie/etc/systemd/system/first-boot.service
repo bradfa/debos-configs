@@ -1,0 +1,15 @@
+# On first boot, we need to:
+# 1. Generate ssh server keys.
+# 2. Forcefully disable this service file so that it only runs once, on first boot.
+
+[Unit]
+Description=First Boot
+Before=ssh.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ssh-keygen -A
+ExecStart=/usr/bin/systemctl --no-pager disable first-boot.service
+
+[Install]
+WantedBy=multi-user.target
