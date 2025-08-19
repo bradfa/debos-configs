@@ -30,6 +30,16 @@ it to a disk to boot on a real machine.  Using `bmaptool` to write the image to
 a real disk will be MUCH faster than using `dd`.
 
 
+## Convert .img Disk to .qcow2
+
+To convert the default output .img disk files into .qcow2 format, use
+`qemu-img`'s convert function, like:
+
+```
+$ qemu-img convert x86_64-uefi-bookworm.img x86_64-uefi-bookworm.qcow2
+```
+
+
 ## Details
 
 You'll need at least debos version 1.0.0+git20201203.e939090-4, which if you're
