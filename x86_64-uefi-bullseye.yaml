@@ -1,9 +1,9 @@
 # debos config file supporting generic x86_64 machines with UEFI.
 
 # Customizable variables for disk size and upstream Debian mirror.
-# Defaults to 32GB disk and RIT's mirror.
+# Defaults to 32GB disk and deb.debian.org mirror.
 {{- $disksize := or .disksize 32015679488 }}
-{{- $mirror := or .mirror "http://mirror.rit.edu/debian/" }}
+{{- $mirror := or .mirror "http://deb.debian.org/debian/" }}
 
 architecture: amd64
 
